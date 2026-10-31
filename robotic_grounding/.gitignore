@@ -304,3 +304,7 @@ claude_datagen.md
 # Regenerable pipeline intermediates (loaded Parquet); see
 # DatasetConfig.loaded_in_intermediate.
 .cache/
+
+# V2D challenge: regenerated retargeted motion and shader caches
+source/robotic_grounding/robotic_grounding/assets/human_motion_data/whole_body/t2_tier1/
+nv_shadercache/
