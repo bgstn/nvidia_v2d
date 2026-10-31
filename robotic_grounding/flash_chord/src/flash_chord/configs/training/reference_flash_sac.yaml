@@ -34,6 +34,9 @@ network:
   batch_norm_epsilon: 0.00001
   rms_norm_epsilon: 0.000001
   projection_epsilon: 0.00000001
+  actor_architecture: mlp
+  skill_count: 20
+  latent_dim: 64
 
 optimization:
   _target_: flash_chord.training.flash_sac.config.OptimizationConfig
@@ -54,6 +57,8 @@ optimization:
   actor_learning_rate_multiplier: 1.0
   residual_mean_learning_rate_multiplier: 1.0
   behavior_cloning_coefficient: 0.0
+  latent_reconstruction_coefficient: 0.1
+  latent_kl_coefficient: 0.1
   target_tau: 0.01
 
 replay:

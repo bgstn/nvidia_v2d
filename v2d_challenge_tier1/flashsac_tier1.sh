@@ -8,6 +8,10 @@
 # Tier 2 later:
 #   sbatch --array=0-29%4 flashsac_tier1.sh t2_tier2
 #
+# A policy variant: 2nd argument names it (outputs/<subdir>_<tag>/), the rest are Hydra overrides:
+#   sbatch -J sw20 --array=0-29%4 flashsac_tier1.sh t2_tier1 switching20 \
+#     training.network.actor_architecture=switching_latent training.network.skill_count=20
+#
 # Re-evaluate an episode whose eval hit "nefc overflow - please increase njmax":
 #   EVAL_NJMAX=2048 sbatch --array=7 flashsac_tier1.sh t2_tier1
 #
@@ -28,6 +32,8 @@
 set -uo pipefail
 
 SUBDIR=${1:-t2_tier1}
+TAG=${2:-}
+EXTRA=("${@:3}")
 SEQ=$(printf "ep%03d" "${SLURM_ARRAY_TASK_ID:?run this as an array job}")
 FINAL_STEPS=349999104
 
@@ -42,10 +48,10 @@ export XDG_CACHE_HOME=/tmp/$USER/flashsac_${SLURM_JOB_ID}/cache
 mkdir -p "$XDG_CACHE_HOME"
 
 EP=$REPO/robotic_grounding/source/robotic_grounding/robotic_grounding/assets/human_motion_data/whole_body/${SUBDIR}/sequence_id=${SEQ}/robot_name=g1/data.parquet
-OUTDIR=outputs/${SUBDIR}/${SEQ}
+OUTDIR=outputs/${SUBDIR}${TAG:+_$TAG}/${SEQ}
 mkdir -p "$OUTDIR"
 
-echo "Host $(hostname)  Job ${SLURM_JOB_ID}  Task ${SLURM_ARRAY_TASK_ID}  ${SUBDIR}/${SEQ}"
+echo "Host $(hostname)  Job ${SLURM_JOB_ID}  Task ${SLURM_ARRAY_TASK_ID}  ${OUTDIR}  ${EXTRA[*]}"
 nvidia-smi --query-gpu=name,memory.free --format=csv,noheader
 
 if [[ ! -f "$EP" ]]; then
@@ -76,7 +82,7 @@ else
   fi
   python scripts/train_flash_sac.py experiment=g1_recon_body_flash_sac \
     "task.parquet='${EP}'" reset.seed=42 logging.mode=disabled \
-    output_dir="$OUTDIR" "${SUPPORT[@]}" "${RESUME[@]}" \
+    output_dir="$OUTDIR" "${SUPPORT[@]}" "${EXTRA[@]}" "${RESUME[@]}" \
     > "$OUTDIR/train.log" 2>&1
   rc=$?
   echo "Training exit code: $rc"

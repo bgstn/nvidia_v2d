@@ -563,6 +563,11 @@ def _actor_temperature_update(
     loss_scaling: bool,
 ) -> tuple[LearnerState, _MetricAccumulator, jax.Array]:
     key, actor_key = jax.random.split(key)
+    switching_latent = config.network.actor_architecture == "switching_latent"
+    apply_kwargs = {"mutable": ["batch_stats"]}
+    if switching_latent:
+        key, latent_key = jax.random.split(key)
+        apply_kwargs = {"mutable": ["batch_stats", "intermediates"], "rngs": {"latent": latent_key}}
     batch_size = batch.observation.shape[0]
     actor_observation = jnp.concatenate((batch.observation, batch.next_observation), axis=0)
     critic_observation = jnp.concatenate((batch.observation, batch.critic_context), axis=-1)
@@ -572,7 +577,7 @@ def _actor_temperature_update(
             {"params": params, "batch_stats": state.actor.batch_stats},
             actor_observation,
             training=True,
-            mutable=["batch_stats"],
+            **apply_kwargs,
         )
         sample = sample_policy(
             distribution,
@@ -596,7 +601,15 @@ def _actor_temperature_update(
             jnp.exp(state.temperature.log_temperature),
             behavior_cloning_coefficient=config.optimization.behavior_cloning_coefficient,
         )
-        return result.loss * state.loss_scale.scale, (result, mutable["batch_stats"])
+        loss = result.loss
+        if switching_latent:
+            losses = mutable["intermediates"]["switching_latent"]
+            q_scale = jax.lax.stop_gradient(jnp.abs(jnp.minimum(q[0], q[1])).mean())
+            loss = loss + q_scale * (
+                config.optimization.latent_reconstruction_coefficient * losses["reconstruction_loss"][0]
+                + config.optimization.latent_kl_coefficient * losses["kl_loss"][0]
+            )
+        return loss * state.loss_scale.scale, (result, mutable["batch_stats"])
 
     (_, (actor_result, actor_batch_stats)), scaled_gradients = jax.value_and_grad(
         scaled_actor_objective,
@@ -613,6 +626,8 @@ def _actor_temperature_update(
         * config.optimization.actor_learning_rate_multiplier
     )
     actor_update_transform = None
+    if switching_latent and config.optimization.residual_mean_learning_rate_multiplier != 1.0:
+        raise ValueError("residual_mean_learning_rate_multiplier is not supported by the switching_latent actor")
     if (
         config.network.actor_head_mode == "residual"
         and config.optimization.residual_mean_learning_rate_multiplier != 1.0

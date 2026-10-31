@@ -298,6 +298,80 @@ class EnsembleBlock(nn.Module):
         return nn.relu(value) + residual
 
 
+class SwitchingLatentHead(nn.Module):
+    """Switching latent feedback controllers (Zhang, Kulic & Burke, arXiv:2410.14191) as a SAC head.
+
+    The trunk features parameterize a Gaussian latent state ``z`` that is trained to reconstruct the
+    normalized observation under a KL penalty to a learned prior. Each skill ``k`` is a linear
+    feedback law ``u_k = G_k (g_k - z)`` with its own goal and gain, and a switching network
+    ``pi(k | z)`` mixes them; the mixture mean keeps the policy a reparameterizable Gaussian. The
+    latent is sampled only in training updates that supply a ``latent`` RNG; inference uses its mean.
+    Auxiliary losses are sown into ``intermediates`` for the learner and ignored elsewhere.
+    """
+
+    action_dim: int
+    config: NetworkConfig
+
+    @nn.compact
+    def __call__(self, features: jax.Array, target: jax.Array, *, training: bool) -> ActorDistribution:
+        latent_dim = self.config.latent_dim
+        skill_count = self.config.skill_count
+        features = features.astype(jnp.float32)
+        target = jax.lax.stop_gradient(target.astype(jnp.float32))
+
+        statistics = nn.Dense(2 * latent_dim, name="encoder")(features)
+        latent_mean, raw_latent_std = jnp.split(statistics, 2, axis=-1)
+        latent_std = nn.softplus(raw_latent_std) + 1.0e-4
+        if training and self.has_rng("latent"):
+            noise = jax.random.normal(self.make_rng("latent"), latent_mean.shape, dtype=latent_mean.dtype)
+            latent = latent_mean + latent_std * noise
+        else:
+            latent = latent_mean
+
+        hidden = nn.relu(nn.Dense(self.config.actor_hidden_dim, name="decoder_hidden")(latent))
+        reconstruction = nn.Dense(target.shape[-1], name="decoder_output")(hidden)
+        self.sow("intermediates", "reconstruction_loss", jnp.mean(jnp.square(reconstruction - target)))
+
+        # softplus(log(e - 1)) = 1, so the prior starts as a standard normal.
+        prior_mean = self.param("prior_mean", nn.initializers.zeros_init(), (latent_dim,), jnp.float32)
+        raw_prior_std = self.param(
+            "prior_std", nn.initializers.constant(math.log(math.e - 1.0)), (latent_dim,), jnp.float32
+        )
+        prior_std = nn.softplus(raw_prior_std) + 1.0e-4
+        kl = (
+            jnp.log(prior_std / latent_std)
+            + (jnp.square(latent_std) + jnp.square(latent_mean - prior_mean)) / (2.0 * jnp.square(prior_std))
+            - 0.5
+        )
+        self.sow("intermediates", "kl_loss", jnp.mean(kl))
+
+        # Zero gains start every skill at the zero residual action, like the zero_dense mean head.
+        goals = self.param("skill_goals", nn.initializers.normal(1.0), (skill_count, latent_dim), jnp.float32)
+        gains = self.param(
+            "skill_gains", nn.initializers.zeros_init(), (skill_count, self.action_dim, latent_dim), jnp.float32
+        )
+        switching = jax.nn.softmax(nn.Dense(skill_count, name="switching")(latent), axis=-1)
+        skill_means = jnp.einsum("kad,bkd->bka", gains, goals[None] - latent[:, None])
+        mean_bias = self.param("mean_bias", nn.initializers.zeros_init(), (self.action_dim,), jnp.float32)
+        mean = jnp.einsum("bk,bka->ba", switching, skill_means) + mean_bias
+
+        initial_log_std = math.log(self.config.initial_normalized_std)
+        normalized_log_std = (
+            2.0 * (initial_log_std - self.config.log_std_min) / (self.config.log_std_max - self.config.log_std_min)
+            - 1.0
+        )
+        raw_log_std = nn.Dense(
+            self.action_dim,
+            kernel_init=nn.initializers.zeros_init(),
+            bias_init=nn.initializers.constant(math.atanh(normalized_log_std)),
+            name="log_std",
+        )(latent)
+        log_std = self.config.log_std_min + (
+            (self.config.log_std_max - self.config.log_std_min) * 0.5 * (1.0 + jnp.tanh(raw_log_std))
+        )
+        return ActorDistribution(mean=mean, log_std=log_std, std=jnp.exp(log_std))
+
+
 class Actor(nn.Module):
     """Tanh-Gaussian FlashSAC actor."""
 
@@ -307,13 +381,13 @@ class Actor(nn.Module):
 
     @nn.compact
     def __call__(self, observation: jax.Array, *, training: bool) -> ActorDistribution:
-        value = UnitBatchNorm(
+        normalized_observation = UnitBatchNorm(
             self.config.batch_norm_update_rate,
             self.config.batch_norm_epsilon,
             self.dtype,
             name="input_norm",
         )(observation, training=training)
-        value = UnitLinear(self.config.actor_hidden_dim, self.dtype, name="embed")(value)
+        value = UnitLinear(self.config.actor_hidden_dim, self.dtype, name="embed")(normalized_observation)
         for block_index in range(self.config.actor_blocks):
             value = Block(
                 self.config.actor_hidden_dim,
@@ -323,6 +397,12 @@ class Actor(nn.Module):
                 name=f"block_{block_index}",
             )(value, training=training)
         value = UnitRMSNorm(self.config.rms_norm_epsilon, self.dtype, name="post_norm")(value)
+        if self.config.actor_architecture == "switching_latent":
+            return SwitchingLatentHead(self.action_dim, self.config, name="switching_latent")(
+                value,
+                normalized_observation,
+                training=training,
+            )
         if self.config.actor_head_mode == "upstream":
             mean = UnitLinear(self.action_dim, self.dtype, name="mean")(value)
             raw_log_std = UnitLinear(self.action_dim, self.dtype, name="log_std")(value)

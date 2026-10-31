@@ -32,6 +32,11 @@ class NetworkConfig:
     batch_norm_epsilon: float = 1.0e-5
     rms_norm_epsilon: float = 1.0e-6
     projection_epsilon: float = 1.0e-8
+    # "mlp" is the FlashSAC actor; "switching_latent" adds a stochastic latent state that
+    # reconstructs the observation and a library of linear latent feedback controllers (skills).
+    actor_architecture: str = "mlp"
+    skill_count: int = 20
+    latent_dim: int = 64
 
     def __post_init__(self) -> None:
         positive_counts = {
@@ -40,6 +45,8 @@ class NetworkConfig:
             "critic_blocks": self.critic_blocks,
             "critic_hidden_dim": self.critic_hidden_dim,
             "expansion": self.expansion,
+            "skill_count": self.skill_count,
+            "latent_dim": self.latent_dim,
         }
         invalid_counts = {name: value for name, value in positive_counts.items() if value <= 0}
         if invalid_counts:
@@ -48,6 +55,10 @@ class NetworkConfig:
             raise ValueError(f"FlashSAC requires exactly two critics, got {self.critic_count}")
         if self.atom_count < 2:
             raise ValueError(f"atom_count must be at least two, got {self.atom_count}")
+        if self.actor_architecture not in {"mlp", "switching_latent"}:
+            raise ValueError(
+                f"actor_architecture must be 'mlp' or 'switching_latent', got {self.actor_architecture!r}"
+            )
         if self.actor_head_mode not in {"upstream", "residual"}:
             raise ValueError(f"actor_head_mode must be 'upstream' or 'residual', got {self.actor_head_mode!r}")
         if self.residual_mean_head not in {"unit_gain", "zero_dense"}:
@@ -107,6 +118,9 @@ class OptimizationConfig:
     actor_learning_rate_multiplier: float = 1.0
     residual_mean_learning_rate_multiplier: float = 1.0
     behavior_cloning_coefficient: float = 0.0
+    # Switching-latent actor auxiliaries, scaled by the batch |Q| like the BC term.
+    latent_reconstruction_coefficient: float = 0.1
+    latent_kl_coefficient: float = 0.1
     target_tau: float = 0.01
     learning_rate_schedule_updates: int | None = None
 
@@ -166,6 +180,9 @@ class OptimizationConfig:
             raise ValueError(
                 f"behavior_cloning_coefficient must be finite and non-negative, got {self.behavior_cloning_coefficient}"
             )
+        latent_coefficients = (self.latent_reconstruction_coefficient, self.latent_kl_coefficient)
+        if any(not math.isfinite(value) or value < 0.0 for value in latent_coefficients):
+            raise ValueError(f"latent loss coefficients must be finite and non-negative, got {latent_coefficients}")
         if not 0.0 < self.target_tau <= 1.0:
             raise ValueError(f"target_tau must be in (0, 1], got {self.target_tau}")
 
