@@ -298,6 +298,14 @@ class EnsembleBlock(nn.Module):
         return nn.relu(value) + residual
 
 
+def _observation_keyed_normal(observation: jax.Array, size: int) -> jax.Array:
+    """Draw standard normals keyed by each row's observation bits, for inference without an RNG."""
+    bits = jax.lax.bitcast_convert_type(observation.astype(jnp.float32), jnp.uint32)
+    multipliers = jnp.arange(observation.shape[-1], dtype=jnp.uint32) * jnp.uint32(2654435761) + jnp.uint32(1)
+    seeds = jnp.sum(bits * multipliers, axis=-1, dtype=jnp.uint32)
+    return jax.vmap(lambda seed: jax.random.normal(jax.random.PRNGKey(seed), (size,)))(seeds)
+
+
 class SwitchingLatentHead(nn.Module):
     """Switching latent feedback controllers (Zhang, Kulic & Burke, arXiv:2410.14191) as a SAC head.
 
@@ -325,6 +333,8 @@ class SwitchingLatentHead(nn.Module):
         if training and self.has_rng("latent"):
             noise = jax.random.normal(self.make_rng("latent"), latent_mean.shape, dtype=latent_mean.dtype)
             latent = latent_mean + latent_std * noise
+        elif self.config.latent_inference == "sample":
+            latent = latent_mean + latent_std * _observation_keyed_normal(target, latent_dim)
         else:
             latent = latent_mean
 

@@ -37,6 +37,7 @@ network:
   actor_architecture: mlp
   skill_count: 20
   latent_dim: 64
+  latent_inference: mean
 
 optimization:
   _target_: flash_chord.training.flash_sac.config.OptimizationConfig

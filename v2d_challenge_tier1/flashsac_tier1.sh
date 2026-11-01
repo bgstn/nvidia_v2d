@@ -24,8 +24,8 @@
 #SBATCH --partition=gpu                # A40 nodes (FlashSAC needs ~46 GB free GPU memory)
 #SBATCH --gres=gpu:A40:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=08:00:00                # ~4 h training + eval, with margin
+#SBATCH --mem=32G                     # peak RSS ~15 GB; smaller requests backfill sooner
+#SBATCH --time=06:30:00                # longest Tier 1 run took 5 h 18 min; resubmitting resumes
 #SBATCH --output=logs_flashsac/%x_%A_%a.out
 # #SBATCH --account=rz76
 

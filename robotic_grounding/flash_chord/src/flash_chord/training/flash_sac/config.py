@@ -37,6 +37,9 @@ class NetworkConfig:
     actor_architecture: str = "mlp"
     skill_count: int = 20
     latent_dim: int = 64
+    # Latent used when acting without a "latent" RNG stream (evaluation): its posterior "mean", or a
+    # "sample" whose noise is keyed by the observation, since the evaluator passes no RNG.
+    latent_inference: str = "mean"
 
     def __post_init__(self) -> None:
         positive_counts = {
@@ -59,6 +62,8 @@ class NetworkConfig:
             raise ValueError(
                 f"actor_architecture must be 'mlp' or 'switching_latent', got {self.actor_architecture!r}"
             )
+        if self.latent_inference not in {"mean", "sample"}:
+            raise ValueError(f"latent_inference must be 'mean' or 'sample', got {self.latent_inference!r}")
         if self.actor_head_mode not in {"upstream", "residual"}:
             raise ValueError(f"actor_head_mode must be 'upstream' or 'residual', got {self.actor_head_mode!r}")
         if self.residual_mean_head not in {"unit_gain", "zero_dense"}:
