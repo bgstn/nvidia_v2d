@@ -2,7 +2,9 @@
 # Fine-tune finished Tier 1 FlashSAC runs for 100M more steps with an object-focused reward, then
 # evaluate, as a Slurm job array (one episode per task). Starts from <source run>/epNNN/state_349999104
 # and follows configs/curriculum/recon_body_flash_sac_object_finetune.yaml; outputs go to
-# outputs/<source run>_objft/epNNN/.
+# outputs/<source run>_objft/epNNN/. CURRICULUM and TAG choose another fine-tune curriculum and
+# output suffix, e.g. the annealed one:
+#   CURRICULUM=recon_body_flash_sac_object_anneal TAG=objanneal sbatch -J objanneal --array=11 flashsac_finetune.sh t2_tier1
 #
 #   sbatch -J objft --array=1,4,25,28 flashsac_finetune.sh t2_tier1
 #   sbatch -J objft --array=2 flashsac_finetune.sh t2_tier1_switching20 \
@@ -27,6 +29,8 @@ SUBDIR=t2_tier1
 SEQ=$(printf "ep%03d" "${SLURM_ARRAY_TASK_ID:?run this as an array job}")
 SOURCE_STEPS=349999104
 FINAL_STEPS=449998848
+CURRICULUM=${CURRICULUM:-recon_body_flash_sac_object_finetune}
+TAG=${TAG:-objft}
 
 source /home/jzhang/rz76_scratch2/jzhang/v2d/env.sh     # adjust if your env.sh lives elsewhere
 FC=$REPO/robotic_grounding/flash_chord
@@ -39,7 +43,7 @@ export XDG_CACHE_HOME=/tmp/$USER/flashsac_${SLURM_JOB_ID}/cache
 mkdir -p "$XDG_CACHE_HOME"
 
 EP=$REPO/robotic_grounding/source/robotic_grounding/robotic_grounding/assets/human_motion_data/whole_body/${SUBDIR}/sequence_id=${SEQ}/robot_name=g1/data.parquet
-OUTDIR=outputs/${SOURCE_RUN}_objft/${SEQ}
+OUTDIR=outputs/${SOURCE_RUN}_${TAG}/${SEQ}
 SOURCE_STATE=outputs/${SOURCE_RUN}/${SEQ}/state_${SOURCE_STEPS}.safetensors
 mkdir -p "$OUTDIR"
 
@@ -76,7 +80,7 @@ else
   RESUME=(training.resume=true "training.checkpoint_path=${STATE}")
   python scripts/train_flash_sac.py experiment=g1_recon_body_flash_sac \
     "task.parquet='${EP}'" reset.seed=42 logging.mode=disabled \
-    output_dir="$OUTDIR" curriculum=recon_body_flash_sac_object_finetune \
+    output_dir="$OUTDIR" "curriculum=${CURRICULUM}" \
     training.total_environment_steps=${FINAL_STEPS} "${SUPPORT[@]}" "${EXTRA[@]}" "${RESUME[@]}" \
     > "$OUTDIR/train.log" 2>&1
   rc=$?

@@ -20,7 +20,7 @@ The scripts were run from a working directory one level above this checkout
 | Switching-latent variant | `flashsac_tier1.sh t2_tier1 switching20 training.network.actor_architecture=switching_latent training.network.skill_count=20` | switching latent feedback-controller actor (`SwitchingLatentHead` in `flash_sac/network.py`) |
 | Spare-GPU lane | `local_lane.sh` | trains pending array episodes on an interactive session's GPU |
 | Checkpoint scoring | `ckpt_select.sh` | scores earlier checkpoints of finished runs (1024 worlds) |
-| Object-focused fine-tune | `flashsac_finetune.sh` | 100M more steps from a finished run with `curriculum=recon_body_flash_sac_object_finetune` |
+| Object-focused fine-tune | `flashsac_finetune.sh` | 100M more steps from a finished run with `curriculum=recon_body_flash_sac_object_finetune` (constant weights), or `CURRICULUM=recon_body_flash_sac_object_anneal TAG=objanneal` (body→object weights annealed over four 25M-step stages) |
 | Policy selection | `select_merged.py` | one checkpoint per episode across runs, earlier checkpoints (`ckpt_select.sh`) and fine-tunes, by local multi-world metrics |
 | Submission rollouts | `run_t2_tier1_eval.sh [checkpoints.json] [results]` | kit `examples/run_policy_evaluation.py`, 1 world, one checkpoint per episode |
 
