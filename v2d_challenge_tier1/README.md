@@ -21,7 +21,7 @@ The scripts were run from a working directory one level above this checkout
 | Spare-GPU lane | `local_lane.sh` | trains pending array episodes on an interactive session's GPU |
 | Checkpoint scoring | `ckpt_select.sh` | scores earlier checkpoints of finished runs (1024 worlds) |
 | Object-focused fine-tune | `flashsac_finetune.sh` | 100M more steps from a finished run with `curriculum=recon_body_flash_sac_object_finetune` |
-| Policy selection | `select_merged.py` | one final checkpoint per episode across runs, by local 4096-world metrics |
+| Policy selection | `select_merged.py` | one checkpoint per episode across runs, earlier checkpoints (`ckpt_select.sh`) and fine-tunes, by local multi-world metrics |
 | Submission rollouts | `run_t2_tier1_eval.sh [checkpoints.json] [results]` | kit `examples/run_policy_evaluation.py`, 1 world, one checkpoint per episode |
 
 Training uses `reset.seed=42` and the default 349,999,104 environment steps. The first submission
