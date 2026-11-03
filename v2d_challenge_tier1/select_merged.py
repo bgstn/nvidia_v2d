@@ -3,7 +3,7 @@
 
 Candidates per run: its final policy (4096-world metrics), the earlier policies scored by
 ckpt_select.sh (1024 worlds), and the final policies of its <run>_objft and <run>_objanneal
-fine-tunes (4096 worlds).
+fine-tunes and of the <run>_objanneal_cont continuation (4096 worlds).
 Each metric is measured in units of a meaningful change (AUC 0.05, SP-SR and MP-SR 0.2, MPPE 5 cm)
 and summed; the candidate with the highest total is chosen. Episodes without local metrics for the
 first run's final policy keep it.
@@ -18,8 +18,12 @@ from pathlib import Path
 
 OUTPUTS = Path("/fs04/scratch2/rz76/jzhang/v2d/video_to_data/robotic_grounding/flash_chord/outputs")
 FINAL = "policy_349999104.safetensors"
-FINETUNED = "policy_449998848.safetensors"
-FINETUNE_TAGS = ("objft", "objanneal")
+# Fine-tune output suffix: its final policy.
+FINETUNES = {
+    "objft": "policy_449998848.safetensors",
+    "objanneal": "policy_449998848.safetensors",
+    "objanneal_cont": "policy_549998592.safetensors",
+}
 # Metric: signed size of a meaningful improvement.
 UNITS = {"add_auc": 0.05, "spider_sr_uncentered": 0.2, "maniptrans_sr": 0.2, "mppe_cm": -5.0}
 
@@ -34,9 +38,9 @@ def candidates(run: str, sequence: str):
     yield OUTPUTS / run / sequence / FINAL, OUTPUTS / run / sequence / f"{FINAL}.metrics.json"
     for report in sorted((OUTPUTS / "ckpt_select" / run / sequence).glob("policy_*.json")):
         yield OUTPUTS / run / sequence / f"{report.stem}.safetensors", report
-    for tag in FINETUNE_TAGS:
-        finetuned = OUTPUTS / f"{run}_{tag}" / sequence / FINETUNED
-        yield finetuned, finetuned.with_name(f"{FINETUNED}.metrics.json")
+    for tag, policy in FINETUNES.items():
+        finetuned = OUTPUTS / f"{run}_{tag}" / sequence / policy
+        yield finetuned, finetuned.with_name(f"{policy}.metrics.json")
 
 
 def main() -> None:

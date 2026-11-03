@@ -5,6 +5,9 @@
 # outputs/<source run>_objft/epNNN/. CURRICULUM and TAG choose another fine-tune curriculum and
 # output suffix, e.g. the annealed one:
 #   CURRICULUM=recon_body_flash_sac_object_anneal TAG=objanneal sbatch -J objanneal --array=11 flashsac_finetune.sh t2_tier1
+# SOURCE_STEPS and FINAL_STEPS continue a fine-tune further, e.g. 100M more steps of the annealed one:
+#   CURRICULUM=recon_body_flash_sac_object_anneal_continue TAG=cont SOURCE_STEPS=449998848 \
+#     FINAL_STEPS=549998592 sbatch -J objcont --array=11 flashsac_finetune.sh t2_tier1_objanneal
 #
 #   sbatch -J objft --array=1,4,25,28 flashsac_finetune.sh t2_tier1
 #   sbatch -J objft --array=2 flashsac_finetune.sh t2_tier1_switching20 \
@@ -27,8 +30,8 @@ SOURCE_RUN=${1:?source run, e.g. t2_tier1 or t2_tier1_switching20}
 EXTRA=("${@:2}")
 SUBDIR=t2_tier1
 SEQ=$(printf "ep%03d" "${SLURM_ARRAY_TASK_ID:?run this as an array job}")
-SOURCE_STEPS=349999104
-FINAL_STEPS=449998848
+SOURCE_STEPS=${SOURCE_STEPS:-349999104}
+FINAL_STEPS=${FINAL_STEPS:-449998848}
 CURRICULUM=${CURRICULUM:-recon_body_flash_sac_object_finetune}
 TAG=${TAG:-objft}
 
