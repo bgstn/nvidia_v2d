@@ -35,6 +35,7 @@ from flash_chord.runtime.joint_drive import (
     ScaledJointTargetDrive,
 )
 from flash_chord.runtime.object_control import VOCParams, apply_object_control
+from flash_chord.runtime.randomization import DomainRandomizationConfig, apply_domain_randomization
 from flash_chord.runtime.sim import SimConfig, build_force_contacts, build_solver
 from flash_chord.scene.builder import Scene
 
@@ -50,6 +51,7 @@ class BaseEnvConfig:
     voc_scale: float = 1.0
     arm_position_integral: JointPositionIntegralConfig = field(default_factory=JointPositionIntegralConfig)
     enforce_joint_velocity_limits: bool = False
+    domain_randomization: DomainRandomizationConfig = field(default_factory=DomainRandomizationConfig)
 
 
 @wp.kernel
@@ -124,6 +126,7 @@ class BaseEnv:
             raise ValueError("BaseEnv requires MuJoCo contacts for measured contact force")
 
         self.solver = build_solver(self.model, self.config.sim)
+        self.domain_scales = apply_domain_randomization(scene, self.solver, self.config.domain_randomization)
         self.state_0 = self.model.state()
         self.state_1 = self.model.state()
         self.control = self.model.control()

@@ -20,6 +20,11 @@ arm_position_integral:
   gain_s_inv2: 0.0
   max_effort_fraction: 0.15
 enforce_joint_velocity_limits: false
+domain_randomization:
+  _target_: flash_chord.runtime.randomization.DomainRandomizationConfig
+  friction_scale: [1.0, 1.0]
+  object_mass_scale: [1.0, 1.0]
+  seed: 0
 observation: ${observation}
 reset: ${reset}
 auto_reset: true

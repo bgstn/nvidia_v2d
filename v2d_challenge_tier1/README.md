@@ -21,6 +21,8 @@ The scripts were run from a working directory one level above this checkout
 | Spare-GPU lane | `local_lane.sh` | trains pending array episodes on an interactive session's GPU |
 | Checkpoint scoring | `ckpt_select.sh` | scores earlier checkpoints of finished runs (1024 worlds) |
 | Object-focused fine-tune | `flashsac_finetune.sh` | 100M more steps from a finished run with `curriculum=recon_body_flash_sac_object_finetune` (constant weights), or `CURRICULUM=recon_body_flash_sac_object_anneal TAG=objanneal` (body→object weights annealed over four 25M-step stages) |
+| Domain-randomized fine-tune | `CURRICULUM=recon_body_flash_sac_object_anneal TAG=objanneal_dr sbatch --array=23 flashsac_finetune.sh <run> "env.domain_randomization.friction_scale=[0.5,1.5]" "env.domain_randomization.object_mass_scale=[0.5,2.0]"` | annealed fine-tune with per-world friction and object mass scales (`flash_chord/runtime/randomization.py`); not used for submissions |
+| Robustness sweep | `robustness_sweep.sh label=checkpoint ...` | `scripts/evaluate_robustness.py` over 12 fixed friction, object mass and size settings (1024 worlds); not the official evaluator |
 | Policy selection | `select_merged.py` | one checkpoint per episode across runs, earlier checkpoints (`ckpt_select.sh`) and fine-tunes, by local multi-world metrics |
 | Submission rollouts | `run_t2_tier1_eval.sh [checkpoints.json] [results]` | kit `examples/run_policy_evaluation.py`, 1 world, one checkpoint per episode |
 
